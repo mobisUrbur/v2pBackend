@@ -66,13 +66,13 @@ func main() {
 
 	///////// 자동차 관련 엔드포인트 등록 //////////////
 	// 회원가입을 처리하는 엔드포인트 추가
-	e.POST("/carSignupHandler", carSignupHandler)
+	e.GET("/carSignupHandler", carSignupHandler)
 
 	// 로그인을 처리하는 엔드포인트 추가
-	e.POST("/carLoginHandler", carLoginHandler)
+	e.GET("/carLoginHandler", carLoginHandler)
 
 	// 자동차 미래 위치 받고 근방 보행자 찾고 충돌 위험 caruuid 배열 응답하는 핸들러
-	e.POST("/updateCarPosionHandler", updateCarPosionHandler)
+	e.GET("/updateCarPosionHandler", updateCarPosionHandler)
 
 	// 서버 시작
 	e.Start(":8080")

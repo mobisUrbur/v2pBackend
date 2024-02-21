@@ -15,18 +15,14 @@ import (
 )
 
 var (
-	alertMutex         sync.Mutex
-	pedestrianEntities map[string]Entity
-	nearbyCarsEntities []Entity
-	dbPool             *pgxpool.Pool               // 대규모로 하려면 필요
-	secretKey          = []byte("your_secret_key") // 비밀 키 설정
-	pedestrianUUIDs    []string
-	carUUIDs           []string
+	alertMutex      sync.Mutex
+	dbPool          *pgxpool.Pool               // 대규모로 하려면 필요
+	secretKey       = []byte("your_secret_key") // 비밀 키 설정
+	PedestrianUUIDs []string
+	CarUUIDs        []string
+	from            [100]float32 // 클라이언트한테 받은 데이터를 저장할 배열
+	to              [2]float32   // 추론 결과가 저장될 배열
 )
-
-func init() {
-	pedestrianEntities = make(map[string]Entity)
-}
 
 func main() {
 	// PostgreSQL 연결 설정
@@ -53,16 +49,14 @@ func main() {
 		return c.JSON(http.StatusOK, Response{Message: "API is running"})
 	})
 
-	// 주기적으로 작업을 수행하는 goroutine 시작
-	// go FindCollsionUUID()
+	go periodicDelete()
 
-	// 보행자 관련 엔드포인트 등록
+	/////////// 보행자 관련 엔드포인트 등록 //////////////////////
+	// 보행자 미래 위치 100개 받고 충돌 위험 peduuid 배열 응답하는 핸들러
+	// e.POST("/pedHandler", PedHandler)
+
 	// 보행자 미래 위치 받는 엔드포인트 추가
-	e.POST("/updatePosition", updatePedestrainPosionHandler) // 기존 임시방편
-
-	// 지금 구현하려는게
-	// 인퍼런스된 100x2 짜리 데이터를 받아서 계산해서 보행자 미래 위치 데이터베이스에 저장하는 엔드포인트 추가
-	e.POST("/inferencedPosition", inferencedPositionHandler)
+	// e.POST("/updatePosition", updatePedestrainPosionHandler) // 기존 임시방편
 
 	// 회원가입을 처리하는 엔드포인트 추가
 	e.POST("/signup", signupHandler)
@@ -70,43 +64,67 @@ func main() {
 	// 로그인을 처리하는 엔드포인트 추가
 	e.POST("/login", loginHandler)
 
-	// 클라이언트가 /peduuids 엔드포인트에 GET 요청을 보낼 때의 핸들러
-	e.GET("/peduuids", func(c echo.Context) error {
-		// 클라이언트에게 현재 저장된 보행자 UUID 목록을 응답
-		return c.JSON(http.StatusOK, map[string]interface{}{"pedestrianUUIDs": pedestrianUUIDs})
-	})
+	// // 클라이언트가 /peduuids 엔드포인트에 GET 요청을 보낼 때의 핸들러
+	// e.GET("/peduuids", func(c echo.Context) error {
+	// 	// 클라이언트에게 현재 저장된 보행자 UUID 목록을 응답
+	// 	return c.JSON(http.StatusOK, map[string]interface{}{"pedestrianUUIDs": PedestrianUUIDs})
+	// })
 
-	// 자동차 관련 엔드포인트 등록
-
+	///////// 자동차 관련 엔드포인트 등록 //////////////
 	// 회원가입을 처리하는 엔드포인트 추가
 	e.POST("/carSignupHandler", carSignupHandler)
 
 	// 로그인을 처리하는 엔드포인트 추가
 	e.POST("/carLoginHandler", carLoginHandler)
 
-	// 자동차 미래 위치 받고 근방 보행자 위치 보내는 엔드포인트 추가
+	// 자동차 미래 위치 받고 근방 보행자 찾고 충돌 위험 caruuid 배열 응답하는 핸들러
 	e.POST("/updateCarPosionHandler", updateCarPosionHandler)
-
-	// 클라이언트가 /caruuids 엔드포인트에 GET 요청을 보낼 때의 핸들러
-	e.GET("/caruuids", func(c echo.Context) error {
-		// 클라이언트에게 현재 저장된 보행자 UUID 목록을 응답
-		return c.JSON(http.StatusOK, map[string]interface{}{"carUUIDs": carUUIDs})
-	})
-
-	// // 클라이언트가 /caruuids 엔드포인트에 GET 요청을 보낼 때의 핸들러
-	// http.HandleFunc("/", HelloServer)
 
 	// 서버 시작
 	e.Start(":8080")
 }
 
-// /////////////환희 관련 구현할거
-func inferencedPositionHandler(c echo.Context) error {
-	return nil
+type Inferenced struct {
+	ID   string       `json:"id"`
+	From [100]float32 `json:"from"`
 }
 
-// func HelloServer(w http.ResponseWriter, r *http.Request) {
-// 	fmt.Fprintf(w, "Hello, %s!", r.URL.Path[1:])
+// 보행자 미래 위치 100개 받고 충돌 위험 peduuid 배열 응답하는 핸들러
+// func PedHandler(c echo.Context) error {
+// 	var data Inferenced
+
+// 	if err := c.Bind(&data); err != nil {
+// 		return c.JSON(http.StatusBadRequest, Response{Message: "Invalid JSON format"})
+// 	}
+
+// 	from := data.From
+
+// 	// 추론 결과를 to 배열에 저장
+// 	C.inference(
+// 		(*C.float)(unsafe.Pointer(&from[0])),
+// 		(*C.float)(unsafe.Pointer(&to[0])))
+
+// 	// 추론 결과 출력
+// 	fmt.Println(to[0], to[1])
+// 	lat := to[0]
+// 	log := to[1]
+
+// 	fmt.Println("100개 데이터 인퍼런스드", from, lat, log)
+
+// 	// 받은 데이터를 사용하여 원하는 작업 수행
+// 	fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", data.ID, lat, log)
+
+// 	// 데이터베이스에 위치 저장 함수 호출
+// 	if err := savePedPositionToDatabase(data.ID, lat, log); err != nil {
+// 		fmt.Println("데이터베이스에 위치 저장 중 오류 발생:", err)
+// 		// 오류 처리 필요에 따라 추가
+// 		return c.JSON(http.StatusInternalServerError, Response{Message: "데이터베이스에 위치 저장 중 오류 발생"})
+// 	}
+
+// 	// 충돌 위험 peduuid
+// 	PedestrianUUIDs, _ = getCollisionUUID()
+
+// 	return c.JSON(http.StatusOK, map[string]interface{}{"pedestrianUUIDs": PedestrianUUIDs})
 // }
 
 // ////////////////////// 자동차 관련 //////////////////////////
@@ -120,8 +138,8 @@ type LatLng struct {
 func getCollisionLatLng(carUUID string) ([]LatLng, error) {
 	query := `
 		SELECT
-			ST_X(pedprediction.geom) AS lat,
-			ST_Y(pedprediction.geom) AS lng
+			ST_X(pedprediction.geom) AS lng,
+			ST_Y(pedprediction.geom) AS lat
 		FROM
 			pedprediction
 		LEFT JOIN LATERAL (
@@ -140,11 +158,11 @@ func getCollisionLatLng(carUUID string) ([]LatLng, error) {
 		) AS carprediction ON true
 		WHERE
 			carprediction.id IS NOT NULL
-			AND carprediction.id = $1;
+			AND carprediction.id =  $1;
 		`
 
 	var lat, lng float64
-	err := dbPool.QueryRow(context.Background(), query, carUUID).Scan(&lat, &lng)
+	err := dbPool.QueryRow(context.Background(), query, carUUID).Scan(&lng, &lat)
 	if err != nil {
 		fmt.Println("Error getting collision coordinates:", err)
 		return nil, err
@@ -162,8 +180,12 @@ type CarPredictPosition struct {
 
 // 위치 정보를 PostGIS 데이터베이스에 저장
 func saveCarPositionToDatabase(userID string, latitude, longitude float64) error {
-	query := "INSERT INTO carPrediction (id, geom) VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326))"
-	_, err := dbPool.Exec(context.Background(), query, userID, longitude, latitude)
+	// query := "INSERT INTO carPrediction (id, geom) VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326))"
+	query := `INSERT INTO carprediction (id, geom) 
+			VALUES ($1, ST_SetSRID(ST_MakePoint($3, $2), 4326))
+			ON CONFLICT (id) 
+			DO UPDATE SET geom = EXCLUDED.geom;`
+	_, err := dbPool.Exec(context.Background(), query, userID, latitude, longitude)
 	return err
 }
 
@@ -192,13 +214,12 @@ func updateCarPosionHandler(c echo.Context) error {
 
 	// 근방 보행자 찾는 함수 호출
 	coordinates, _ := getCollisionLatLng(data.UserID)
-	// map[string]interface{}{"pedestrianGPSs": coordinates}
 
-	_, carUUIDs := getCollisionUUID()
+	_, CarUUIDs = getCollisionUUID()
 
-	fmt.Println("근방 보행자 좌표:", coordinates, "충돌 차량 UUID:", carUUIDs)
+	fmt.Println("근방 보행자 좌표:", coordinates, "충돌 차량 UUID:", CarUUIDs)
 
-	return c.JSON(http.StatusOK, CarResponse{PedestrianGPSs: coordinates, CarsUUID: carUUIDs})
+	return c.JSON(http.StatusOK, CarResponse{PedestrianGPSs: coordinates, CarsUUID: CarUUIDs})
 }
 
 // 자동차 정보를 PostGIS 데이터베이스에 저장
@@ -304,21 +325,6 @@ func loginHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, Response{Message: "사용자 조회 중 오류 발생"})
 	}
 
-	// // 임시 비밀번호 보안 걸어둔거 때문에 잘안돼서 일단 없이 진행
-	// // 비밀번호 검증
-	// hashedinput, err := bcrypt.GenerateFromPassword([]byte(loginData.Password), bcrypt.DefaultCost)
-	// fmt.Println("비밀번호 해싱", string(hashedinput), user.Password)
-	// // 두 string이 같은지 비교
-	// if string(hashedinput) != user.Password {
-	// 	fmt.Println("비밀번호가 일치하지 않음", string(loginData.Password))
-	// 	return c.JSON(http.StatusUnauthorized, Response{Message: "이메일 또는 비밀번호가 잘못되었습니다"})
-	// }
-	// err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(hashedinput))
-	// if err != nil {
-	// 	// 비밀번호가 일치하지 않음
-	// 	return c.JSON(http.StatusUnauthorized, Response{Message: "이메일 또는 비밀번호가 잘못되었습니다"})
-	// }
-
 	fmt.Println("비밀번호 해싱 안함", string(loginData.Password), user.Password)
 	// 두 string이 같은지 비교
 	if string(loginData.Password) != user.Password {
@@ -412,18 +418,11 @@ func signupHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, Response{Message: "잘못된 요청 형식"})
 	}
 
-	// // 비밀번호를 유효성 검사하고 해싱
-	// hashedPassword, err := bcrypt.GenerateFromPassword([]byte(userData.Password), bcrypt.DefaultCost)
-	// if err != nil {
-	// 	return c.JSON(http.StatusInternalServerError, Response{Message: "비밀번호 해싱 중 오류 발생"})
-	// }
-	hashedPassword := userData.Password // 일단 해싱 없이 진행
-
 	// 고유 ID 생성
 	userID := generateUniqueID()
 
 	// 사용자 정보를 데이터베이스에 저장
-	if err := saveUserToDatabase(userID, userData.Email, string(hashedPassword), userData.Gender, userData.Region); err != nil {
+	if err := saveUserToDatabase(userID, userData.Email, string(userData.Password), userData.Gender, userData.Region); err != nil {
 		return c.JSON(http.StatusInternalServerError, Response{Message: "사용자 정보 저장 중 오류 발생"})
 	}
 
@@ -434,6 +433,17 @@ func signupHandler(c echo.Context) error {
 // 새로운 고유한 ID를 생성하는 함수
 func generateUniqueID() string {
 	return uuid.New().String()
+}
+
+// 지금은 안쓰는 꺼버린? 사람 데이터 계속 갖고 있으면 안되니까 주기적으로 삭제 ?!?!
+func periodicDelete() {
+	ticker := time.NewTicker(1 * time.Hour)
+
+	for range ticker.C {
+		// 저장된 미래 위치 지우는 쿼리문 실행
+		deletepedPrediction()
+		deletecarPrediction()
+	}
 }
 
 func deletepedPrediction() {
@@ -449,21 +459,6 @@ func deletecarPrediction() {
 	_, err := dbPool.Exec(context.Background(), query)
 	if err != nil {
 		fmt.Println("Error deleting position:", err)
-	}
-}
-
-// 주기적으로 작업을 수행하는 함수
-func FindCollsionUUID() {
-	ticker := time.NewTicker(5 * time.Second)
-
-	for range ticker.C {
-		// 충돌이 예상되는지 확인할 모든 보행자와 차량을 가져오는 쿼리문 실행
-		pedestrianUUIDs, carUUIDs = getCollisionUUID()
-		// 원래 저장되어있던 미래 예측 데이터 다 지우고 새로 받아오기
-
-		// 저장된 미래 위치 지우는 쿼리문 실행
-		// deletepedPrediction()
-		// deletecarPrediction()
 	}
 }
 
@@ -511,8 +506,11 @@ func saveUserToDatabase(id, email, hashedPassword, gender, region string) error 
 
 // 보행자 미래 위치 정보를 PostGIS 데이터베이스에 저장
 func savePedPositionToDatabase(userID string, latitude, longitude float64) error {
-	query := "INSERT INTO pedPrediction (id, geom) VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326))"
-	_, err := dbPool.Exec(context.Background(), query, userID, longitude, latitude)
+	query := `INSERT INTO pedprediction (id, geom) 
+			VALUES ($1, ST_SetSRID(ST_MakePoint($3, $2), 4326))
+			ON CONFLICT (id) 
+			DO UPDATE SET geom = EXCLUDED.geom;`
+	_, err := dbPool.Exec(context.Background(), query, userID, latitude, longitude)
 	return err
 }
 
@@ -548,23 +546,23 @@ type Position struct {
 	Longitude float64 `json:"longitude"`
 }
 
-// JSON 데이터를 받는 핸들러
-func updatePedestrainPosionHandler(c echo.Context) error {
-	var data Position
+// // JSON 데이터를 받는 핸들러
+// func updatePedestrainPosionHandler(c echo.Context) error {
+// 	var data Position
 
-	if err := c.Bind(&data); err != nil {
-		return c.JSON(http.StatusBadRequest, Response{Message: "Invalid JSON format"})
-	}
+// 	if err := c.Bind(&data); err != nil {
+// 		return c.JSON(http.StatusBadRequest, Response{Message: "Invalid JSON format"})
+// 	}
 
-	// 받은 데이터를 사용하여 원하는 작업 수행
-	fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", data.UserID, data.Latitude, data.Longitude)
+// 	// 받은 데이터를 사용하여 원하는 작업 수행
+// 	fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", data.UserID, data.Latitude, data.Longitude)
 
-	// 데이터베이스에 위치 저장 함수 호출
-	if err := savePedPositionToDatabase(data.UserID, data.Latitude, data.Longitude); err != nil {
-		fmt.Println("데이터베이스에 위치 저장 중 오류 발생:", err)
-		// 오류 처리 필요에 따라 추가
-		return c.JSON(http.StatusInternalServerError, Response{Message: "데이터베이스에 위치 저장 중 오류 발생"})
-	}
+// 	// 데이터베이스에 위치 저장 함수 호출
+// 	if err := savePedPositionToDatabase(data.UserID, data.Latitude, data.Longitude); err != nil {
+// 		fmt.Println("데이터베이스에 위치 저장 중 오류 발생:", err)
+// 		// 오류 처리 필요에 따라 추가
+// 		return c.JSON(http.StatusInternalServerError, Response{Message: "데이터베이스에 위치 저장 중 오류 발생"})
+// 	}
 
-	return c.JSON(http.StatusOK, Response{Message: "Position updated successfully"})
-}
+// 	return c.JSON(http.StatusOK, Response{Message: "Position updated successfully"})
+// }

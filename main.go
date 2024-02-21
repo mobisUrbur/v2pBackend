@@ -92,13 +92,14 @@ func main() {
 	e.GET("/nearPedfindHandler", nearPedfindHandler)
 
 	// 클라이언트가 /caruuids 엔드포인트에 GET 요청을 보낼 때의 핸들러
-	e.GET("/", func(c echo.Context) error {
-		// 클라이언트에게 현재 저장된 보행자 UUID 목록을 응답
-		return c.JSON(http.StatusOK, Response{Message: "Hello World"})
-	})
+	http.HandleFunc("/", HelloServer)
 
 	// 서버 시작
 	e.Start(":8080")
+}
+
+func HelloServer(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Hello, %s!", r.URL.Path[1:])
 }
 
 // ////////////////////// 자동차 관련 //////////////////////////

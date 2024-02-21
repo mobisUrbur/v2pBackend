@@ -54,11 +54,15 @@ func main() {
 	})
 
 	// 주기적으로 작업을 수행하는 goroutine 시작
-	go FindCollsionUUID()
+	// go FindCollsionUUID()
 
 	// 보행자 관련 엔드포인트 등록
 	// 보행자 미래 위치 받는 엔드포인트 추가
-	e.POST("/updatePosition", updatePedestrainPosionHandler)
+	e.POST("/updatePosition", updatePedestrainPosionHandler) // 기존 임시방편
+
+	// 지금 구현하려는게
+	// 인퍼런스된 100x2 짜리 데이터를 받아서 계산해서 보행자 미래 위치 데이터베이스에 저장하는 엔드포인트 추가
+	e.POST("/inferencedPosition", inferencedPositionHandler)
 
 	// 회원가입을 처리하는 엔드포인트 추가
 	e.POST("/signup", signupHandler)
@@ -73,8 +77,6 @@ func main() {
 	})
 
 	// 자동차 관련 엔드포인트 등록
-	// 자동차 미래 위치 받는 엔드포인트 추가
-	e.POST("/updateCarPosionHandler", updateCarPosionHandler)
 
 	// 회원가입을 처리하는 엔드포인트 추가
 	e.POST("/carSignupHandler", carSignupHandler)
@@ -82,25 +84,30 @@ func main() {
 	// 로그인을 처리하는 엔드포인트 추가
 	e.POST("/carLoginHandler", carLoginHandler)
 
+	// 자동차 미래 위치 받고 근방 보행자 위치 보내는 엔드포인트 추가
+	e.POST("/updateCarPosionHandler", updateCarPosionHandler)
+
 	// 클라이언트가 /caruuids 엔드포인트에 GET 요청을 보낼 때의 핸들러
 	e.GET("/caruuids", func(c echo.Context) error {
 		// 클라이언트에게 현재 저장된 보행자 UUID 목록을 응답
 		return c.JSON(http.StatusOK, map[string]interface{}{"carUUIDs": carUUIDs})
 	})
 
-	// 클라이언트가 /nearped 엔드포인트에 GET 요청을 보낼 때의 핸들러
-	e.GET("/nearPedfindHandler", nearPedfindHandler)
-
-	// 클라이언트가 /caruuids 엔드포인트에 GET 요청을 보낼 때의 핸들러
-	http.HandleFunc("/", HelloServer)
+	// // 클라이언트가 /caruuids 엔드포인트에 GET 요청을 보낼 때의 핸들러
+	// http.HandleFunc("/", HelloServer)
 
 	// 서버 시작
 	e.Start(":8080")
 }
 
-func HelloServer(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello, %s!", r.URL.Path[1:])
+// /////////////환희 관련 구현할거
+func inferencedPositionHandler(c echo.Context) error {
+	return nil
 }
+
+// func HelloServer(w http.ResponseWriter, r *http.Request) {
+// 	fmt.Fprintf(w, "Hello, %s!", r.URL.Path[1:])
+// }
 
 // ////////////////////// 자동차 관련 //////////////////////////
 // 좌표를 저장하기 위한 구조체
@@ -147,26 +154,6 @@ func getCollisionLatLng(carUUID string) ([]LatLng, error) {
 	return coordinates, nil
 }
 
-type CarUUID struct {
-	UserID string `json:"id"`
-}
-
-// 자동차 미래 위치 기준 근방 보행자 찾는 핸들러
-func nearPedfindHandler(c echo.Context) error {
-	var data CarUUID
-
-	if err := c.Bind(&data); err != nil {
-		return c.JSON(http.StatusBadRequest, Response{Message: "Invalid JSON format"})
-	}
-
-	fmt.Println("Received car UUID:", data)
-	// 근방 보행자 찾는 함수 호출
-	coordinates, _ := getCollisionLatLng(data.UserID)
-
-	// 클라이언트에 응답 보내기
-	return c.JSON(http.StatusOK, map[string]interface{}{"pedestrianGPSs": coordinates})
-}
-
 type CarPredictPosition struct {
 	UserID    string  `json:"userID"`
 	Latitude  float64 `json:"latitude"`
@@ -180,7 +167,12 @@ func saveCarPositionToDatabase(userID string, latitude, longitude float64) error
 	return err
 }
 
-// JSON 데이터를 받는 핸들러
+type CarResponse struct {
+	PedestrianGPSs []LatLng `json:"pedestrianGPSs"`
+	CarsUUID       []string `json:"carsUUIDs"`
+}
+
+// 자동차 미래 위치 받고 근방 보행자 찾고 충돌 위험 caruuid 배열 응답하는 핸들러
 func updateCarPosionHandler(c echo.Context) error {
 	var data CarPredictPosition
 
@@ -198,7 +190,15 @@ func updateCarPosionHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, Response{Message: "데이터베이스에 위치 저장 중 오류 발생"})
 	}
 
-	return c.JSON(http.StatusOK, Response{Message: "Position updated successfully"})
+	// 근방 보행자 찾는 함수 호출
+	coordinates, _ := getCollisionLatLng(data.UserID)
+	// map[string]interface{}{"pedestrianGPSs": coordinates}
+
+	_, carUUIDs := getCollisionUUID()
+
+	fmt.Println("근방 보행자 좌표:", coordinates, "충돌 차량 UUID:", carUUIDs)
+
+	return c.JSON(http.StatusOK, CarResponse{PedestrianGPSs: coordinates, CarsUUID: carUUIDs})
 }
 
 // 자동차 정보를 PostGIS 데이터베이스에 저장
@@ -488,7 +488,6 @@ func getCollisionUUID() ([]string, []string) {
 				)
 			ORDER BY
 				pedprediction.geom <-> carprediction.geom
-			LIMIT 1
 		) AS carprediction ON true
 		WHERE
 			carprediction.id IS NOT NULL;

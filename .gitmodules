@@ -1,0 +1,3 @@
+[submodule "thirdparty/urbr-on-device"]
+	path = thirdparty/urbr-on-device
+	url = https://github.com/kimhappy/urbr-on-device

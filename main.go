@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+	"strconv"
 
 	"github.com/golang-jwt/jwt"
 	"github.com/google/uuid"
@@ -82,7 +83,7 @@ func main() {
 	e.GET("/updateCarPositionHandler", updateCarPositionHandler)
 
 	// 서버 시작
-	e.Start(":8080")
+	e.Start(":8888")
 }
 
 type Inferenced struct {
@@ -178,12 +179,6 @@ func getCollisionLatLng(carUUID string) ([]LatLng, error) {
 	return coordinates, nil
 }
 
-type CarPredictPosition struct {
-	UserID    string  `json:"userID"`
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-}
-
 // 위치 정보를 PostGIS 데이터베이스에 저장
 func saveCarPositionToDatabase(userID string, latitude, longitude float64) error {
 	// query := "INSERT INTO carPrediction (id, geom) VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326))"
@@ -202,24 +197,33 @@ type CarResponse struct {
 
 // 자동차 미래 위치 받고 근방 보행자 찾고 충돌 위험 caruuid 배열 응답하는 핸들러
 func updateCarPositionHandler(c echo.Context) error {
-	var data CarPredictPosition
+	userID := c.QueryParam("userID")
+    latitudeStr := c.QueryParam("latitude")
+    longitudeStr := c.QueryParam("longitude")
 
-	if err := c.Bind(&data); err != nil {
-		return c.JSON(http.StatusBadRequest, Response{Message: "Invalid JSON format"})
-	}
+	// Convert latitude and longitude from string to float64
+    latitude, err := strconv.ParseFloat(latitudeStr, 64)
+    if err != nil {
+        return c.JSON(http.StatusBadRequest, Response{Message: "유효한 위도 값을 제공해주세요"})
+    }
+
+    longitude, err := strconv.ParseFloat(longitudeStr, 64)
+    if err != nil {
+        return c.JSON(http.StatusBadRequest, Response{Message: "유효한 경도 값을 제공해주세요"})
+    }
 
 	// 받은 데이터를 사용하여 원하는 작업 수행
-	fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", data.UserID, data.Latitude, data.Longitude)
+	fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", userID, latitude, longitude)
 
 	// 데이터베이스에 위치 저장 함수 호출
-	if err := saveCarPositionToDatabase(data.UserID, data.Latitude, data.Longitude); err != nil {
+	if err := saveCarPositionToDatabase(userID, float64(latitude), float64(longitude)); err != nil {
 		fmt.Println("데이터베이스에 위치 저장 중 오류 발생:", err)
 		// 오류 처리 필요에 따라 추가
 		return c.JSON(http.StatusInternalServerError, Response{Message: "데이터베이스에 위치 저장 중 오류 발생"})
 	}
 
 	// 근방 보행자 찾는 함수 호출
-	coordinates, _ := getCollisionLatLng(data.UserID)
+	coordinates, _ := getCollisionLatLng(userID)
 
 	_, CarUUIDs = getCollisionUUID()
 
@@ -272,12 +276,6 @@ func getCarByEmail(email string) (User, error) {
 	return user, err
 }
 
-// 로그인 요청 데이터 모델
-type CarLoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
 // 로그인 응답 데이터 모델
 type CarLoginResponse struct {
 	Message string `json:"message"`
@@ -286,30 +284,31 @@ type CarLoginResponse struct {
 
 // 로그인을 처리하는 핸들러
 func carLoginHandler(c echo.Context) error {
-	var loginData CarLoginRequest
-	if err := c.Bind(&loginData); err != nil {
-		return c.JSON(http.StatusBadRequest, Response{Message: "잘못된 요청 형식"})
-	}
+    // Reading query parameters from the request
+    email := c.QueryParam("email")
+    password := c.QueryParam("password")
 
-	fmt.Println("Received login request:", loginData.Email, loginData.Password)
+    // Check if email and password are provided
+    if email == "" || password == "" {
+        return c.JSON(http.StatusBadRequest, Response{Message: "이메일과 패스워드를 모두 제공해주세요"})
+    }
 
 	// 데이터베이스에서 이메일로 사용자 찾기
-	user, err := getCarByEmail(loginData.Email)
+	user, err := getCarByEmail(email)
 	fmt.Println("id찾기", user.Email, user.Password, user.ID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, Response{Message: "사용자 조회 중 오류 발생"})
 	}
-
-	fmt.Println("비밀번호 해싱 안함", string(loginData.Password), user.Password)
 	// 두 string이 같은지 비교
-	if string(loginData.Password) != user.Password {
-		fmt.Println("비밀번호가 일치하지 않음", string(loginData.Password))
+	if string(password) != user.Password {
+		fmt.Println("비밀번호가 일치하지 않음", string(password))
 		return c.JSON(http.StatusUnauthorized, Response{Message: "이메일 또는 비밀번호가 잘못되었습니다"})
 	}
 
 	// 클라이언트에 응답 보내기
 	return c.JSON(http.StatusOK, CarLoginResponse{Message: "로그인 성공", ID: user.ID})
 }
+
 
 ////////////////////////// 보행자 관련 //////////////////////////
 

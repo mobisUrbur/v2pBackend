@@ -1,3 +1,4 @@
+// 환희꺼 버전
 package main
 
 // import (
@@ -77,7 +78,7 @@ func main() {
 	e.POST("/pedHandler", PedHandler)
 
 	// // 보행자 미래 위치 받는 엔드포인트 추가
-	e.POST("/updatePosition", updatePedestrainPosionHandler) // 기존 임시방편
+	// e.POST("/updatePosition", updatePedestrainPosionHandler) // 기존 임시방편
 
 	// 회원가입을 처리하는 엔드포인트 추가
 	e.POST("/signup", signupHandler)
@@ -100,11 +101,11 @@ func main() {
 }
 
 type Inferenced struct {
-	ID   string       `json:"id"`
-	From [100]float32 `json:"from"`
+	ID   string       `json:"userID"`
+	From [100]float32 `json:"output"`
 }
 
-// // // 보행자 미래 위치 100개 받고 충돌 위험 peduuid 배열 응답하는 핸들러
+// // 보행자 미래 위치 100개 받고 충돌 위험 peduuid 배열 응답하는 핸들러
 func PedHandler(c echo.Context) error {
 	var data Inferenced
 
@@ -124,13 +125,13 @@ func PedHandler(c echo.Context) error {
 	lat := to[0]
 	log := to[1]
 
-	fmt.Println("100개 데이터 인퍼런스드", from, lat, log)
+	fmt.Println("100개 데이터 인퍼런스드", from, float64(lat), float64(log))
 
 	// 받은 데이터를 사용하여 원하는 작업 수행
-	fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", data.ID, lat, log)
+	// fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", data.ID, lat, log)
 
 	// 데이터베이스에 위치 저장 함수 호출
-	if err := savePedPositionToDatabase(data.ID, lat, log); err != nil {
+	if err := savePedPositionToDatabase(data.ID, float64(lat), float64(log)); err != nil {
 		fmt.Println("데이터베이스에 위치 저장 중 오류 발생:", err)
 		// 오류 처리 필요에 따라 추가
 		return c.JSON(http.StatusInternalServerError, Response{Message: "데이터베이스에 위치 저장 중 오류 발생"})
@@ -561,26 +562,31 @@ type Position struct {
 	Longitude float64 `json:"longitude"`
 }
 
-// JSON 데이터를 받는 핸들러
-func updatePedestrainPosionHandler(c echo.Context) error {
-	var data Position
-
-	if err := c.Bind(&data); err != nil {
-		return c.JSON(http.StatusBadRequest, Response{Message: "Invalid JSON format"})
-	}
-
-	// 받은 데이터를 사용하여 원하는 작업 수행
-	fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", data.UserID, data.Latitude, data.Longitude)
-
-	// 데이터베이스에 위치 저장 함수 호출
-	if err := savePedPositionToDatabase(data.UserID, data.Latitude, data.Longitude); err != nil {
-		fmt.Println("데이터베이스에 위치 저장 중 오류 발생:", err)
-		// 오류 처리 필요에 따라 추가
-		return c.JSON(http.StatusInternalServerError, Response{Message: "데이터베이스에 위치 저장 중 오류 발생"})
-	}
-
-	// 충돌 위험 peduuid
-	PedestrianUUIDs, _ = getCollisionUUID()
-
-	return c.JSON(http.StatusOK, map[string]interface{}{"pedestrianUUIDs": PedestrianUUIDs})
+type InferencedResponse struct {
+	userID string       `json:"userID"`
+	From   [100]float32 `json:"output"`
 }
+
+// // JSON 데이터를 받는 핸들러
+// func updatePedestrainPosionHandler(c echo.Context) error {
+// 	var data Inferenced
+
+// 	if err := c.Bind(&data); err != nil {
+// 		return c.JSON(http.StatusBadRequest, Response{Message: "Invalid JSON format"})
+// 	}
+
+// 	// 받은 데이터를 사용하여 원하는 작업 수행
+// 	fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", data.userID, data.Latitude, data.Longitude)
+
+// 	// 데이터베이스에 위치 저장 함수 호출
+// 	if err := savePedPositionToDatabase(data.UserID, data.Latitude, data.Longitude); err != nil {
+// 		fmt.Println("데이터베이스에 위치 저장 중 오류 발생:", err)
+// 		// 오류 처리 필요에 따라 추가
+// 		return c.JSON(http.StatusInternalServerError, Response{Message: "데이터베이스에 위치 저장 중 오류 발생"})
+// 	}
+
+// 	// 충돌 위험 peduuid
+// 	PedestrianUUIDs, _ = getCollisionUUID()
+
+// 	return c.JSON(http.StatusOK, map[string]interface{}{"pedestrianUUIDs": PedestrianUUIDs})
+// }

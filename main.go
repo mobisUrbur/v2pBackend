@@ -83,7 +83,7 @@ func main() {
 	e.GET("/updateCarPositionHandler", updateCarPositionHandler)
 
 	// 서버 시작
-	e.Start(":8888")
+	e.Start(":8080")
 }
 
 type Inferenced struct {

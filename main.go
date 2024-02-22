@@ -73,7 +73,7 @@ func main() {
 
 	///////// 자동차 관련 엔드포인트 등록 //////////////
 	// 회원가입을 처리하는 엔드포인트 추가
-	e.GET("/carSignupHandler", carSignupHandler)
+	e.GET("/carSignupHandler", carSignupHandler2)
 
 	// 로그인을 처리하는 엔드포인트 추가
 	e.GET("/carLoginHandler", carLoginHandler)
@@ -241,29 +241,50 @@ type carSignUpResponse struct {
 	ID      string `json:"id,omitempty"` // 새로 추가한 ID 필드
 }
 
-// 회원가입 요청 데이터 모델
-type carSignupRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+// // 회원가입 요청 데이터 모델
+// type carSignupRequest struct {
+// 	Email    string `json:"email"`
+// 	Password string `json:"password"`
+// }
+func carSignupHandler2(c echo.Context) error {
+    // Reading query parameters from the request
+    email := c.QueryParam("email")
+    password := c.QueryParam("password")
+
+    // Check if email and password are provided
+    if email == "" || password == "" {
+        return c.JSON(http.StatusBadRequest, Response{Message: "이메일과 패스워드를 모두 제공해주세요"})
+    }
+
+	fmt.Println(email, password)
+
+    // 사용자 정보를 데이터베이스에 저장
+    userID := generateUniqueID()
+    if err := saveCarToDatabase(userID, email, password); err != nil {
+        return c.JSON(http.StatusInternalServerError, Response{Message: "사용자 정보 저장 중 오류 발생"})
+    }
+
+    // 클라이언트에 응답 보내기
+    return c.JSON(http.StatusOK, carSignUpResponse{Message: "사용자가 성공적으로 가입되었습니다!", ID: userID})
 }
 
-// 회원가입을 처리하는 핸들러
-func carSignupHandler(c echo.Context) error {
-	var userData carSignupRequest
-	if err := c.Bind(&userData); err != nil {
-		return c.JSON(http.StatusBadRequest, Response{Message: "잘못된 요청 형식"})
-	}
-	// 고유 ID 생성
-	userID := generateUniqueID()
+// // 회원가입을 처리하는 핸들러
+// func carSignupHandler(c echo.Context) error {
+// 	var userData carSignupRequest
+// 	if err := c.Bind(&userData); err != nil {
+// 		return c.JSON(http.StatusBadRequest, Response{Message: "잘못된 요청 형식"})
+// 	}
+// 	// 고유 ID 생성
+// 	userID := generateUniqueID()
 
-	// 사용자 정보를 데이터베이스에 저장
-	if err := saveCarToDatabase(userID, userData.Email, string(userData.Password)); err != nil {
-		return c.JSON(http.StatusInternalServerError, Response{Message: "사용자 정보 저장 중 오류 발생"})
-	}
+// 	// 사용자 정보를 데이터베이스에 저장
+// 	if err := saveCarToDatabase(userID, userData.Email, string(userData.Password)); err != nil {
+// 		return c.JSON(http.StatusInternalServerError, Response{Message: "사용자 정보 저장 중 오류 발생"})
+// 	}
 
-	// 클라이언트에 응답 보내기
-	return c.JSON(http.StatusOK, carSignUpResponse{Message: "사용자가 성공적으로 가입되었습니다!", ID: userID})
-}
+// 	// 클라이언트에 응답 보내기
+// 	return c.JSON(http.StatusOK, carSignUpResponse{Message: "사용자가 성공적으로 가입되었습니다!", ID: userID})
+// }
 
 // 이메일로 자동차 정보 조회
 func getCarByEmail(email string) (User, error) {

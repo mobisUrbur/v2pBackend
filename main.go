@@ -116,7 +116,7 @@ func PedHandler(c echo.Context) error {
 	fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", data.ID, lat, log)
 
 	// 데이터베이스에 위치 저장 함수 호출
-	if err := savePedPositionToDatabase(data.ID, lat, log); err != nil {
+	if err := savePedPositionToDatabase(data.ID, float64(lat), float64(log)); err != nil {
 		fmt.Println("데이터베이스에 위치 저장 중 오류 발생:", err)
 		// 오류 처리 필요에 따라 추가
 		return c.JSON(http.StatusInternalServerError, Response{Message: "데이터베이스에 위치 저장 중 오류 발생"})

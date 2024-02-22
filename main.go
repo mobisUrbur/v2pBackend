@@ -63,7 +63,7 @@ func main() {
 	e.POST("/pedHandler", PedHandler)
 
 	// // 보행자 미래 위치 받는 엔드포인트 추가
-	e.POST("/updatePosition", updatePedestrainPosionHandler) // 기존 임시방편
+	// e.POST("/updatePosition", updatePedestrainPosionHandler) // 기존 임시방편
 
 	// 회원가입을 처리하는 엔드포인트 추가
 	e.POST("/signup", signupHandler)
@@ -79,7 +79,7 @@ func main() {
 	e.GET("/carLoginHandler", carLoginHandler)
 
 	// 자동차 미래 위치 받고 근방 보행자 찾고 충돌 위험 caruuid 배열 응답하는 핸들러
-	e.GET("/updateCarPosionHandler", updateCarPosionHandler)
+	e.GET("/updateCarPositionHandler", updateCarPositionHandler)
 
 	// 서버 시작
 	e.Start(":8080")
@@ -95,10 +95,15 @@ func PedHandler(c echo.Context) error {
 	var data Inferenced
 
 	if err := c.Bind(&data); err != nil {
+		fmt.Println("ERROR!!!")
 		return c.JSON(http.StatusBadRequest, Response{Message: "Invalid JSON format"})
 	}
 
+	fmt.Println(data)
 	from := data.From
+
+	// lat := from[0]
+	// log := from[1]
 
 	// 추론 결과를 to 배열에 저장
 	C.inference(
@@ -110,10 +115,10 @@ func PedHandler(c echo.Context) error {
 	lat := to[0]
 	log := to[1]
 
-	fmt.Println("100개 데이터 인퍼런스드", from, lat, log)
+	fmt.Println("100개 데이터 인퍼런스드", from, float64(lat), float64(log))
 
 	// 받은 데이터를 사용하여 원하는 작업 수행
-	fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", data.ID, lat, log)
+	fmt.Printf("Received position update: userID %s, Latitude %f, Longitude %f\n", data.ID,  float64(lat), float64(log))
 
 	// 데이터베이스에 위치 저장 함수 호출
 	if err := savePedPositionToDatabase(data.ID, float64(lat), float64(log)); err != nil {
@@ -196,7 +201,7 @@ type CarResponse struct {
 }
 
 // 자동차 미래 위치 받고 근방 보행자 찾고 충돌 위험 caruuid 배열 응답하는 핸들러
-func updateCarPosionHandler(c echo.Context) error {
+func updateCarPositionHandler(c echo.Context) error {
 	var data CarPredictPosition
 
 	if err := c.Bind(&data); err != nil {

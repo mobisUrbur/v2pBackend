@@ -1,31 +1,18 @@
 package main
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"net/http"
-// 	"sync"
-// 	"time"
-
-// 	"github.com/golang-jwt/jwt"
-// 	"github.com/google/uuid"
-// 	"github.com/jackc/pgx/v4/pgxpool"
-// 	"github.com/labstack/echo/v4"
-// 	"github.com/labstack/echo/v4/middleware"
-// )
-
 /*
-#cgo LDFLAGS: -L. -lurbr_go
+#cgo LDFLAGS: -L./thirdparty/urbr-on-device/bindings/go/target/release -lurbr_go
 #include <stdlib.h>
 void inference(float const* from, float* to);
 */
+import "C"
 import (
-	"C"
 	"context"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/golang-jwt/jwt"
 	"github.com/google/uuid"
@@ -33,7 +20,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
-import "unsafe"
 
 var (
 	alertMutex      sync.Mutex
@@ -196,9 +182,9 @@ type CarPredictPosition struct {
 // 위치 정보를 PostGIS 데이터베이스에 저장
 func saveCarPositionToDatabase(userID string, latitude, longitude float64) error {
 	// query := "INSERT INTO carPrediction (id, geom) VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326))"
-	query := `INSERT INTO carprediction (id, geom) 
+	query := `INSERT INTO carprediction (id, geom)
 			VALUES ($1, ST_SetSRID(ST_MakePoint($3, $2), 4326))
-			ON CONFLICT (id) 
+			ON CONFLICT (id)
 			DO UPDATE SET geom = EXCLUDED.geom;`
 	_, err := dbPool.Exec(context.Background(), query, userID, latitude, longitude)
 	return err
@@ -521,9 +507,9 @@ func saveUserToDatabase(id, email, hashedPassword, gender, region string) error 
 
 // 보행자 미래 위치 정보를 PostGIS 데이터베이스에 저장
 func savePedPositionToDatabase(userID string, latitude, longitude float64) error {
-	query := `INSERT INTO pedprediction (id, geom) 
+	query := `INSERT INTO pedprediction (id, geom)
 			VALUES ($1, ST_SetSRID(ST_MakePoint($3, $2), 4326))
-			ON CONFLICT (id) 
+			ON CONFLICT (id)
 			DO UPDATE SET geom = EXCLUDED.geom;`
 	_, err := dbPool.Exec(context.Background(), query, userID, latitude, longitude)
 	return err
